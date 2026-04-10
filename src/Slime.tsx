@@ -101,30 +101,130 @@ class Shockwave {
   }
 }
 
+class EnemyBullet {
+  x: number; y: number; vx: number; vy: number; life: number = 0;
+  constructor(x: number, y: number, vx: number, vy: number) {
+    this.x = x; this.y = y; this.vx = vx; this.vy = vy;
+  }
+  update() { this.x += this.vx; this.y += this.vy; this.life++; }
+  draw(ctx: CanvasRenderingContext2D) {
+    ctx.fillStyle = '#f97316';
+    ctx.beginPath(); ctx.arc(this.x, this.y, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'white';
+    ctx.beginPath(); ctx.arc(this.x, this.y, 2, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
 class Enemy {
-  x: number; y: number; vx: number; vy: number; size: number = 15; hp: number = 3;
-  constructor(x: number, y: number) {
-    this.x = x; this.y = y;
+  x: number; y: number; vx: number; vy: number; size: number; hp: number; maxHp: number;
+  type: 'chaser' | 'shooter' | 'tank';
+  shootTimer: number = 0;
+  constructor(x: number, y: number, type: 'chaser' | 'shooter' | 'tank' = 'chaser') {
+    this.x = x; this.y = y; this.type = type;
     this.vx = (Math.random() - 0.5) * 2;
     this.vy = (Math.random() - 0.5) * 2;
+    if (type === 'tank') { this.size = 25; this.hp = 15; this.maxHp = 15; }
+    else if (type === 'shooter') { this.size = 12; this.hp = 2; this.maxHp = 2; }
+    else { this.size = 15; this.hp = 4; this.maxHp = 4; }
   }
-  update(targetX: number, targetY: number) {
+  update(physics: any) {
+    const targetX = physics.centerPoint.x;
+    const targetY = physics.centerPoint.y;
     const dx = targetX - this.x; const dy = targetY - this.y;
     const dist = Math.hypot(dx, dy);
-    if (dist > 0) {
-      this.vx += (dx / dist) * 0.1;
-      this.vy += (dy / dist) * 0.1;
+    
+    let speedMult = this.type === 'tank' ? 0.03 : this.type === 'shooter' ? 0.08 : 0.1;
+    
+    if (this.type === 'shooter' && dist < 300) {
+      // Keep distance
+      this.vx -= (dx / dist) * 0.05;
+      this.vy -= (dy / dist) * 0.05;
+      this.shootTimer++;
+      if (this.shootTimer > 100) {
+        this.shootTimer = 0;
+        const bx = (dx / dist) * 8;
+        const by = (dy / dist) * 8;
+        physics.enemyBullets.push(new EnemyBullet(this.x, this.y, bx, by));
+      }
+    } else if (dist > 0) {
+      this.vx += (dx / dist) * speedMult;
+      this.vy += (dy / dist) * speedMult;
     }
+    
     this.vx *= 0.95; this.vy *= 0.95;
     this.x += this.vx; this.y += this.vy;
   }
   draw(ctx: CanvasRenderingContext2D) {
-    ctx.fillStyle = '#ef4444';
+    ctx.fillStyle = this.type === 'tank' ? '#a855f7' : this.type === 'shooter' ? '#f97316' : '#ef4444';
     ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'white';
-    ctx.fillRect(this.x - 10, this.y - 20, 20, 4);
+    
+    // HP Bar
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(this.x - 15, this.y - this.size - 10, 30, 4);
     ctx.fillStyle = '#22c55e';
-    ctx.fillRect(this.x - 10, this.y - 20, 20 * (this.hp / 3), 4);
+    ctx.fillRect(this.x - 15, this.y - this.size - 10, 30 * (this.hp / this.maxHp), 4);
+  }
+}
+
+class Platform {
+  x: number; y: number; w: number; h: number;
+  constructor(x: number, y: number, w: number, h: number) {
+    this.x = x; this.y = y; this.w = w; this.h = h;
+  }
+  draw(ctx: CanvasRenderingContext2D) {
+    ctx.fillStyle = '#334155';
+    ctx.beginPath();
+    ctx.roundRect(this.x, this.y, this.w, this.h, 8);
+    ctx.fill();
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+  }
+}
+
+class Lava extends Platform {
+  constructor(x: number, y: number, w: number, h: number) {
+    super(x, y, w, h);
+  }
+  draw(ctx: CanvasRenderingContext2D) {
+    ctx.fillStyle = '#7f1d1d';
+    ctx.beginPath(); ctx.roundRect(this.x, this.y, this.w, this.h, 4); ctx.fill();
+    ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 2; ctx.stroke();
+    // Add some glowing effect
+    ctx.fillStyle = 'rgba(239, 68, 68, 0.5)';
+    ctx.beginPath(); ctx.roundRect(this.x, this.y - 5, this.w, 5, 2); ctx.fill();
+  }
+}
+
+class PowerUp {
+  x: number; y: number; type: 'multishot' | 'rapidfire' | 'heal' | 'shield' | 'speed';
+  bobOffset: number = 0; life: number = 0;
+  constructor(x: number, y: number, type: 'multishot' | 'rapidfire' | 'heal' | 'shield' | 'speed') {
+    this.x = x; this.y = y; this.type = type;
+  }
+  update() { this.life += 0.05; this.bobOffset = Math.sin(this.life) * 10; }
+  draw(ctx: CanvasRenderingContext2D) {
+    ctx.save();
+    ctx.translate(this.x, this.y + this.bobOffset);
+    ctx.fillStyle = this.type === 'heal' ? '#22c55e' : this.type === 'rapidfire' ? '#facc15' : this.type === 'shield' ? '#06b6d4' : this.type === 'speed' ? '#3b82f6' : '#a855f7';
+    ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = 'bold 14px sans-serif';
+    ctx.fillText(this.type === 'heal' ? 'H' : this.type === 'rapidfire' ? 'R' : this.type === 'shield' ? 'S' : this.type === 'speed' ? '>>' : 'M', 0, 0);
+    ctx.restore();
+  }
+}
+
+class Portal {
+  x: number; y: number; rotation: number = 0;
+  constructor(x: number, y: number) { this.x = x; this.y = y; }
+  update() { this.rotation += 0.05; }
+  draw(ctx: CanvasRenderingContext2D) {
+    ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.rotation);
+    ctx.strokeStyle = '#c084fc'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([10, 10]); ctx.strokeStyle = '#e879f9';
+    ctx.beginPath(); ctx.arc(0, 0, 40, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
   }
 }
 
@@ -240,7 +340,12 @@ export default function SlimeApp() {
       mouseHistory: {x: number, y: number, time: number}[] = [];
       particles: Particle[] = [];
       bullets: Bullet[] = [];
+      enemyBullets: EnemyBullet[] = [];
       enemies: Enemy[] = [];
+      platforms: Platform[] = [];
+      lavas: Lava[] = [];
+      powerups: PowerUp[] = [];
+      portal: Portal | null = null;
       shockwaves: Shockwave[] = [];
       trail: {x: number, y: number}[] = [];
       baseRadii: number[] = [];
@@ -250,6 +355,16 @@ export default function SlimeApp() {
       screenShake: number = 0;
       blinkTimer: number = 0;
       isBlinking: boolean = false;
+      
+      // Game State
+      level: number = 1;
+      score: number = 0;
+      hp: number = 100;
+      maxHp: number = 100;
+      invulnTimer: number = 0;
+      hasShield: boolean = false;
+      activePowerups: { [key: string]: number } = {};
+      isGrounded: boolean = false;
       
       constructor(cx: number, cy: number, radius: number, numPoints: number, shape: string) {
         this.shape = shape;
@@ -312,6 +427,83 @@ export default function SlimeApp() {
         return radius;
       }
 
+      loadLevel(levelIndex: number) {
+        this.level = levelIndex;
+        this.platforms = [];
+        this.lavas = [];
+        this.enemies = [];
+        this.powerups = [];
+        this.portal = null;
+        this.bullets = [];
+        this.enemyBullets = [];
+        this.particles = [];
+        this.shockwaves = [];
+        this.trail = [];
+        
+        const cw = window.innerWidth;
+        const ch = window.innerHeight;
+        
+        // Reset slime position to start
+        const cx = 100;
+        const cy = ch - 150;
+        const dx = cx - this.centerPoint.x;
+        const dy = cy - this.centerPoint.y;
+        
+        for (const p of this.points) {
+          p.x += dx; p.y += dy;
+          p.oldX = p.x; p.oldY = p.y;
+        }
+
+        if (levelIndex === 1) {
+          this.platforms.push(new Platform(cw/2 - 150, ch - 150, 300, 20));
+          this.platforms.push(new Platform(cw/2 + 250, ch - 300, 200, 20));
+          this.enemies.push(new Enemy(cw/2, ch - 200, 'chaser'));
+          this.enemies.push(new Enemy(cw/2 + 300, ch - 350, 'chaser'));
+          this.powerups.push(new PowerUp(cw/2, ch - 200, 'rapidfire'));
+        } else if (levelIndex === 2) {
+          this.platforms.push(new Platform(200, ch - 200, 150, 20));
+          this.platforms.push(new Platform(450, ch - 350, 150, 20));
+          this.platforms.push(new Platform(700, ch - 500, 150, 20));
+          this.enemies.push(new Enemy(250, ch - 250, 'chaser'));
+          this.enemies.push(new Enemy(500, ch - 400, 'shooter'));
+          this.enemies.push(new Enemy(750, ch - 550, 'chaser'));
+          this.powerups.push(new PowerUp(500, ch - 400, 'shield'));
+        } else if (levelIndex === 3) {
+          this.platforms.push(new Platform(100, ch - 200, 200, 20));
+          this.lavas.push(new Lava(300, ch - 200, 200, 20));
+          this.platforms.push(new Platform(500, ch - 200, 200, 20));
+          this.platforms.push(new Platform(cw/2 - 100, ch - 450, 200, 20));
+          this.enemies.push(new Enemy(cw/2, ch - 500, 'tank'));
+          this.enemies.push(new Enemy(150, ch - 250, 'shooter'));
+          this.enemies.push(new Enemy(600, ch - 250, 'shooter'));
+          this.powerups.push(new PowerUp(cw/2, ch - 500, 'multishot'));
+          this.powerups.push(new PowerUp(150, ch - 250, 'speed'));
+        } else if (levelIndex >= 4) {
+          // Procedural generation for higher levels
+          const numPlats = 3 + Math.floor(Math.random() * 4);
+          for (let i = 0; i < numPlats; i++) {
+            const px = 200 + Math.random() * (cw - 400);
+            const py = ch - 150 - Math.random() * (ch - 300);
+            
+            if (Math.random() > 0.8) {
+              this.lavas.push(new Lava(px, py, 150 + Math.random() * 100, 20));
+            } else {
+              this.platforms.push(new Platform(px, py, 150 + Math.random() * 100, 20));
+            }
+            
+            if (Math.random() > 0.3) {
+              const r = Math.random();
+              const type = r > 0.8 ? 'tank' : r > 0.5 ? 'shooter' : 'chaser';
+              this.enemies.push(new Enemy(px + 50, py - 50, type));
+            }
+            if (Math.random() > 0.8) {
+              const types: ('multishot'|'rapidfire'|'heal'|'shield'|'speed')[] = ['multishot', 'rapidfire', 'heal', 'shield', 'speed'];
+              this.powerups.push(new PowerUp(px + 50, py - 100, types[Math.floor(Math.random()*types.length)]));
+            }
+          }
+        }
+      }
+
       reset(newShape?: string) {
         const cx = canvas.width / 2;
         const cy = canvas.height / 2;
@@ -345,10 +537,22 @@ export default function SlimeApp() {
         }
         this.particles = [];
         this.bullets = [];
+        this.enemyBullets = [];
         this.enemies = [];
+        this.platforms = [];
+        this.lavas = [];
+        this.powerups = [];
+        this.portal = null;
         this.shockwaves = [];
         this.trail = [];
         this.screenShake = 0;
+        this.hp = this.maxHp;
+        this.score = 0;
+        this.hasShield = false;
+        this.activePowerups = {};
+        if (paramsRef.current.gameMode) {
+          this.loadLevel(1);
+        }
       }
 
       updateParams() {
@@ -403,7 +607,8 @@ export default function SlimeApp() {
       shoot() {
         if (!paramsRef.current.gameMode) return;
         const now = Date.now();
-        if (now - this.lastShootTime < 200) return;
+        const cooldown = this.activePowerups['rapidfire'] && this.activePowerups['rapidfire'] > now ? 50 : 200;
+        if (now - this.lastShootTime < cooldown) return;
         this.lastShootTime = now;
         this.gunRecoil = 15;
         this.screenShake = Math.max(this.screenShake, 5);
@@ -424,7 +629,16 @@ export default function SlimeApp() {
         const gunTipX = cx + (dx/dist)*70;
         const gunTipY = cy + (dy/dist)*70;
 
-        this.bullets.push(new Bullet(gunTipX, gunTipY, vx, vy));
+        if (this.activePowerups['multishot'] && this.activePowerups['multishot'] > now) {
+          const angle = Math.atan2(vy, vx);
+          const spread = 0.2;
+          for (let i = -1; i <= 1; i++) {
+            const a = angle + i * spread;
+            this.bullets.push(new Bullet(gunTipX, gunTipY, Math.cos(a) * 15, Math.sin(a) * 15));
+          }
+        } else {
+          this.bullets.push(new Bullet(gunTipX, gunTipY, vx, vy));
+        }
         
         // Muzzle flash
         for (let i = 0; i < 3; i++) {
@@ -444,16 +658,22 @@ export default function SlimeApp() {
 
       update() {
         this.updateParams();
-        const { drag, gravity, bounciness, wasdMode, color } = paramsRef.current;
+        const { drag, gravity, bounciness, wasdMode, color, gameMode } = paramsRef.current;
         const friction = 1 - drag;
+        const now = Date.now();
+
+        this.isGrounded = false;
 
         // WASD Control
         if (wasdMode) {
-          const speed = 1.5;
-          if (keysRef.current['w'] || keysRef.current['arrowup']) this.centerPoint.oldY += speed;
+          const speed = this.activePowerups['speed'] && this.activePowerups['speed'] > now ? 2.5 : 1.5;
           if (keysRef.current['s'] || keysRef.current['arrowdown']) this.centerPoint.oldY -= speed;
-          if (keysRef.current['a'] || keysRef.current['arrowleft']) this.centerPoint.oldX += speed;
-          if (keysRef.current['d'] || keysRef.current['arrowright']) this.centerPoint.oldX -= speed;
+          if (keysRef.current['a'] || keysRef.current['arrowleft']) {
+            for(const p of this.points) p.oldX += speed * 0.5;
+          }
+          if (keysRef.current['d'] || keysRef.current['arrowright']) {
+            for(const p of this.points) p.oldX -= speed * 0.5;
+          }
         }
 
         this.screenShake *= 0.9;
@@ -489,6 +709,42 @@ export default function SlimeApp() {
           p.x += vx;
           p.y += vy + gravity * p.mass;
 
+          // Platform collision
+          for (const plat of this.platforms) {
+            if (p.x > plat.x && p.x < plat.x + plat.w && p.y > plat.y && p.y < plat.y + plat.h) {
+              const distLeft = p.x - plat.x;
+              const distRight = (plat.x + plat.w) - p.x;
+              const distTop = p.y - plat.y;
+              const distBottom = (plat.y + plat.h) - p.y;
+              const minDist = Math.min(distLeft, distRight, distTop, distBottom);
+              
+              if (minDist === distTop) { 
+                p.y = plat.y; p.oldY = p.y + vy * bounciness; p.oldX = p.x - vx * 0.8; 
+                this.isGrounded = true; 
+              } else if (minDist === distBottom) { 
+                p.y = plat.y + plat.h; p.oldY = p.y + vy * bounciness; p.oldX = p.x - vx * 0.8; 
+              } else if (minDist === distLeft) { 
+                p.x = plat.x; p.oldX = p.x + vx * bounciness; p.oldY = p.y - vy * 0.8; 
+              } else if (minDist === distRight) { 
+                p.x = plat.x + plat.w; p.oldX = p.x + vx * bounciness; p.oldY = p.y - vy * 0.8; 
+              }
+            }
+          }
+
+          // Lava collision
+          for (const lava of this.lavas) {
+            if (p.x > lava.x && p.x < lava.x + lava.w && p.y > lava.y && p.y < lava.y + lava.h) {
+              const distTop = p.y - lava.y;
+              p.y = lava.y; p.oldY = p.y + vy * bounciness; p.oldX = p.x - vx * 0.8; 
+              this.isGrounded = true;
+              
+              if (now - this.invulnTimer > 1000) {
+                this.takeDamage(15);
+                this.centerPoint.oldY += 20; // Bounce off lava
+              }
+            }
+          }
+
           // Floor collision
           if (p.y > canvas.height - 20) {
             if (vy > 10) {
@@ -499,6 +755,7 @@ export default function SlimeApp() {
             p.y = canvas.height - 20;
             p.oldY = p.y + vy * bounciness;
             p.oldX = p.x - vx * 0.8; // Floor friction
+            this.isGrounded = true;
           }
           // Walls
           if (p.x < 20) {
@@ -534,6 +791,16 @@ export default function SlimeApp() {
           }
         }
 
+        // Jump logic
+        if (wasdMode && (keysRef.current['w'] || keysRef.current['arrowup']) && this.isGrounded) {
+          const jumpForce = this.activePowerups['speed'] && this.activePowerups['speed'] > now ? 25 : 20;
+          for (const p of this.points) {
+            p.oldY = p.y + jumpForce; // Upward impulse
+          }
+          this.isGrounded = false;
+          this.spawnSplatter(this.centerPoint.x, this.centerPoint.y + paramsRef.current.size, 0, 5, paramsRef.current.color);
+        }
+
         // Relax springs
         for (let i = 0; i < 8; i++) {
           for (const spring of this.springs) {
@@ -554,6 +821,39 @@ export default function SlimeApp() {
           this.particles[i].update(canvas.height);
           if (this.particles[i].life >= this.particles[i].maxLife) {
             this.particles.splice(i, 1);
+          }
+        }
+
+        // Update powerups
+        for (let i = this.powerups.length - 1; i >= 0; i--) {
+          const pu = this.powerups[i];
+          pu.update();
+          const dist = Math.hypot(this.centerPoint.x - pu.x, this.centerPoint.y - pu.y);
+          if (dist < paramsRef.current.size + 15) {
+            if (pu.type === 'heal') {
+              this.hp = Math.min(this.maxHp, this.hp + 30);
+            } else if (pu.type === 'shield') {
+              this.hasShield = true;
+            } else {
+              this.activePowerups[pu.type] = now + 10000; // 10 seconds
+            }
+            this.score += 50;
+            this.spawnSplatter(pu.x, pu.y, 0, 0, pu.type === 'heal' ? '#22c55e' : pu.type === 'shield' ? '#06b6d4' : '#facc15');
+            this.powerups.splice(i, 1);
+          }
+        }
+
+        // Update portal
+        if (gameMode && this.enemies.length === 0 && !this.portal) {
+          this.portal = new Portal(canvas.width / 2, 100);
+        }
+        if (this.portal) {
+          this.portal.update();
+          const dist = Math.hypot(this.centerPoint.x - this.portal.x, this.centerPoint.y - this.portal.y);
+          if (dist < paramsRef.current.size + 30) {
+            this.score += 500;
+            this.loadLevel(this.level + 1);
+            return;
           }
         }
 
@@ -582,6 +882,7 @@ export default function SlimeApp() {
                 this.shockwaves.push(new Shockwave(e.x, e.y, 60, '239, 68, 68'));
                 this.screenShake = Math.max(this.screenShake, 8);
                 this.enemies.splice(j, 1);
+                this.score += 100;
               }
               break;
             }
@@ -591,8 +892,8 @@ export default function SlimeApp() {
           }
         }
 
-        // Spawn enemies
-        if (paramsRef.current.gameMode && Math.random() < 0.02 && this.enemies.length < 10) {
+        // Spawn enemies (only if not in a level or if we want continuous spawning)
+        if (gameMode && Math.random() < 0.01 && this.enemies.length < 5 && this.level < 1) {
           const side = Math.floor(Math.random() * 4);
           let ex = 0, ey = 0;
           if (side === 0) { ex = Math.random() * canvas.width; ey = -30; }
@@ -602,10 +903,25 @@ export default function SlimeApp() {
           this.enemies.push(new Enemy(ex, ey));
         }
 
+        // Update enemy bullets
+        for (let i = this.enemyBullets.length - 1; i >= 0; i--) {
+          const b = this.enemyBullets[i];
+          b.update();
+          if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height || b.life > 200) {
+            this.enemyBullets.splice(i, 1);
+            continue;
+          }
+          const dist = Math.hypot(this.centerPoint.x - b.x, this.centerPoint.y - b.y);
+          if (dist < paramsRef.current.size + 5) {
+            this.takeDamage(10);
+            this.enemyBullets.splice(i, 1);
+          }
+        }
+
         // Update enemies
-        if (paramsRef.current.gameMode) {
+        if (gameMode) {
           for (const e of this.enemies) {
-            e.update(this.centerPoint.x, this.centerPoint.y);
+            e.update(this);
             // Collision with slime
             const dist = Math.hypot(this.centerPoint.x - e.x, this.centerPoint.y - e.y);
             if (dist < paramsRef.current.size + e.size) {
@@ -619,11 +935,41 @@ export default function SlimeApp() {
                 this.centerPoint.oldX -= (dx / ndist) * 2;
                 this.centerPoint.oldY -= (dy / ndist) * 2;
               }
+              
+              // Damage player
+              if (now - this.invulnTimer > 1000) {
+                this.takeDamage(15);
+              }
             }
           }
         }
         
         this.gunRecoil *= 0.8;
+      }
+
+      takeDamage(amount: number) {
+        const now = Date.now();
+        if (now - this.invulnTimer < 1000) return;
+        
+        if (this.hasShield) {
+          this.hasShield = false;
+          this.invulnTimer = now;
+          this.screenShake = Math.max(this.screenShake, 5);
+          this.shockwaves.push(new Shockwave(this.centerPoint.x, this.centerPoint.y, 100, '6, 182, 212'));
+          return;
+        }
+
+        this.hp -= amount;
+        this.invulnTimer = now;
+        this.screenShake = Math.max(this.screenShake, 10);
+        this.spawnSplatter(this.centerPoint.x, this.centerPoint.y, 0, 0, paramsRef.current.color);
+        if (this.hp <= 0) {
+          this.loadLevel(1); // Restart
+          this.hp = this.maxHp;
+          this.score = 0;
+          this.hasShield = false;
+          this.activePowerups = {};
+        }
       }
 
       draw(ctx: CanvasRenderingContext2D) {
@@ -638,6 +984,18 @@ export default function SlimeApp() {
         }
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw platforms
+        for (const plat of this.platforms) plat.draw(ctx);
+
+        // Draw lava
+        for (const lava of this.lavas) lava.draw(ctx);
+
+        // Draw portal
+        if (this.portal) this.portal.draw(ctx);
+
+        // Draw powerups
+        for (const pu of this.powerups) pu.draw(ctx);
 
         // Draw trail
         if (this.trail.length > 1) {
@@ -746,10 +1104,22 @@ export default function SlimeApp() {
         
         // Draw bullets
         for (const b of this.bullets) b.draw(ctx);
+        for (const b of this.enemyBullets) b.draw(ctx);
 
         // Draw enemies
         if (paramsRef.current.gameMode) {
           for (const e of this.enemies) e.draw(ctx);
+        }
+
+        // Draw shield
+        if (this.hasShield) {
+          ctx.beginPath();
+          ctx.arc(this.centerPoint.x, this.centerPoint.y, paramsRef.current.size + 15, 0, Math.PI * 2);
+          ctx.strokeStyle = '#06b6d4';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+          ctx.fillStyle = 'rgba(6, 182, 212, 0.2)';
+          ctx.fill();
         }
 
         // Draw gun
@@ -809,6 +1179,47 @@ export default function SlimeApp() {
           ctx.roundRect(25, -3, 20 * cooldownRatio, 6, 3);
           ctx.fill();
           ctx.shadowBlur = 0;
+
+          ctx.restore();
+        }
+
+        // Draw HUD
+        if (paramsRef.current.gameMode) {
+          ctx.save();
+          ctx.resetTransform(); // Reset any screen shake for HUD
+          
+          // Top left: HP & Score
+          ctx.fillStyle = 'white';
+          ctx.font = 'bold 24px sans-serif';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'top';
+          ctx.fillText(`Score: ${this.score}`, 20, 20);
+          ctx.fillText(`Level: ${this.level}`, 20, 50);
+
+          // HP Bar
+          ctx.fillStyle = '#334155';
+          ctx.beginPath(); ctx.roundRect(20, 85, 200, 15, 8); ctx.fill();
+          ctx.fillStyle = '#22c55e';
+          ctx.beginPath(); ctx.roundRect(20, 85, 200 * (this.hp / this.maxHp), 15, 8); ctx.fill();
+
+          // Active Powerups
+          let puY = 115;
+          const now = Date.now();
+          for (const [type, expiry] of Object.entries(this.activePowerups)) {
+            if (expiry > now) {
+              const remaining = Math.ceil((expiry - now) / 1000);
+              ctx.fillStyle = type === 'rapidfire' ? '#facc15' : '#a855f7';
+              ctx.font = 'bold 16px sans-serif';
+              ctx.fillText(`${type.toUpperCase()}: ${remaining}s`, 20, puY);
+              puY += 25;
+            }
+          }
+
+          // Damage flash overlay
+          if (now - this.invulnTimer < 100) {
+            ctx.fillStyle = 'rgba(239, 68, 68, 0.3)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+          }
 
           ctx.restore();
         }
@@ -914,8 +1325,8 @@ export default function SlimeApp() {
   }, []); // Empty dep array, we update params via refs
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-slate-900" style={{
-      backgroundImage: 'radial-gradient(circle at 2px 2px, rgba(255,255,255,0.1) 1px, transparent 0)',
+    <div className="relative w-full h-screen overflow-hidden bg-slate-950" style={{
+      backgroundImage: 'radial-gradient(circle at 2px 2px, rgba(255,255,255,0.05) 1px, transparent 0)',
       backgroundSize: '40px 40px'
     }}>
       <canvas ref={canvasRef} className="absolute inset-0 cursor-grab active:cursor-grabbing" />
