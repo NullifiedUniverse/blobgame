@@ -28,29 +28,27 @@ class Particle {
   life: number; maxLife: number; color: string; size: number;
   constructor(x: number, y: number, vx: number, vy: number, color: string) {
     this.x = x; this.y = y; this.vx = vx; this.vy = vy;
-    this.life = 0; this.maxLife = Math.random() * 30 + 20;
-    this.color = color; this.size = Math.random() * 5 + 2;
+    this.life = 0; this.maxLife = Math.random() * 20 + 20;
+    this.color = color; this.size = Math.random() * 3 + 1;
   }
   update(canvasHeight: number) {
     this.x += this.vx; 
     this.y += this.vy; 
-    this.vy += 0.3; // gravity
-    this.vx *= 0.98; // air friction
+    this.vy += 0.2; // gravity
     
     // Floor bounce
     if (this.y > canvasHeight - 20) {
       this.y = canvasHeight - 20;
-      this.vy *= -0.6;
+      this.vy *= -0.5;
       this.vx *= 0.8;
     }
     
     this.life++;
   }
   draw(ctx: CanvasRenderingContext2D) {
-    const progress = this.life / this.maxLife;
-    ctx.globalAlpha = Math.max(0, 1 - progress);
+    ctx.globalAlpha = Math.max(0, 1 - this.life / this.maxLife);
     ctx.fillStyle = this.color;
-    ctx.beginPath(); ctx.arc(this.x, this.y, this.size * (1 - progress * 0.5), 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = 1;
   }
 }
@@ -74,16 +72,13 @@ class Bullet {
         ctx.lineTo(this.history[i].x, this.history[i].y);
       }
       ctx.lineTo(this.x, this.y);
-      ctx.strokeStyle = 'rgba(56, 189, 248, 0.8)';
-      ctx.lineWidth = 6;
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.5)';
+      ctx.lineWidth = 4;
       ctx.lineCap = 'round';
       ctx.stroke();
     }
-    ctx.fillStyle = '#ffffff';
-    ctx.shadowColor = '#38bdf8';
-    ctx.shadowBlur = 10;
-    ctx.beginPath(); ctx.arc(this.x, this.y, 5, 0, Math.PI * 2); ctx.fill();
-    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#bae6fd';
+    ctx.beginPath(); ctx.arc(this.x, this.y, 4, 0, Math.PI * 2); ctx.fill();
   }
 }
 
@@ -106,221 +101,30 @@ class Shockwave {
   }
 }
 
-class FloatingText {
-  x: number; y: number; text: string; color: string; life: number = 0; maxLife: number = 60;
-  constructor(x: number, y: number, text: string, color: string = 'white') {
-    this.x = x; this.y = y; this.text = text; this.color = color;
-  }
-  update() { this.y -= 1; this.life++; }
-  draw(ctx: CanvasRenderingContext2D) {
-    const alpha = 1 - (this.life / this.maxLife);
-    ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
-    if (this.color === 'red') ctx.fillStyle = `rgba(239, 68, 68, ${alpha})`;
-    if (this.color === 'green') ctx.fillStyle = `rgba(34, 197, 94, ${alpha})`;
-    ctx.font = 'bold 20px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(this.text, this.x, this.y);
-  }
-}
-
-class EnemyBullet {
-  x: number; y: number; vx: number; vy: number; life: number = 0;
-  constructor(x: number, y: number, vx: number, vy: number) {
-    this.x = x; this.y = y; this.vx = vx; this.vy = vy;
-  }
-  update() { this.x += this.vx; this.y += this.vy; this.life++; }
-  draw(ctx: CanvasRenderingContext2D) {
-    ctx.fillStyle = '#f97316';
-    ctx.beginPath(); ctx.arc(this.x, this.y, 5, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'white';
-    ctx.beginPath(); ctx.arc(this.x, this.y, 2, 0, Math.PI * 2); ctx.fill();
-  }
-}
-
 class Enemy {
-  x: number; y: number; vx: number; vy: number; size: number; hp: number; maxHp: number;
-  type: 'chaser' | 'shooter' | 'tank';
-  shootTimer: number = 0;
-  constructor(x: number, y: number, type: 'chaser' | 'shooter' | 'tank' = 'chaser') {
-    this.x = x; this.y = y; this.type = type;
+  x: number; y: number; vx: number; vy: number; size: number = 15; hp: number = 3;
+  constructor(x: number, y: number) {
+    this.x = x; this.y = y;
     this.vx = (Math.random() - 0.5) * 2;
     this.vy = (Math.random() - 0.5) * 2;
-    if (type === 'tank') { this.size = 25; this.hp = 15; this.maxHp = 15; }
-    else if (type === 'shooter') { this.size = 12; this.hp = 2; this.maxHp = 2; }
-    else { this.size = 15; this.hp = 4; this.maxHp = 4; }
   }
-  update(physics: any) {
-    const targetX = physics.centerPoint.x;
-    const targetY = physics.centerPoint.y;
+  update(targetX: number, targetY: number) {
     const dx = targetX - this.x; const dy = targetY - this.y;
     const dist = Math.hypot(dx, dy);
-    
-    let speedMult = this.type === 'tank' ? 0.03 : this.type === 'shooter' ? 0.08 : 0.1;
-    
-    if (this.type === 'shooter' && dist < 300) {
-      // Keep distance
-      this.vx -= (dx / dist) * 0.05;
-      this.vy -= (dy / dist) * 0.05;
-      this.shootTimer++;
-      if (this.shootTimer > 100) {
-        this.shootTimer = 0;
-        const bx = (dx / dist) * 8;
-        const by = (dy / dist) * 8;
-        physics.enemyBullets.push(new EnemyBullet(this.x, this.y, bx, by));
-      }
-    } else if (dist > 0) {
-      this.vx += (dx / dist) * speedMult;
-      this.vy += (dy / dist) * speedMult;
+    if (dist > 0) {
+      this.vx += (dx / dist) * 0.1;
+      this.vy += (dy / dist) * 0.1;
     }
-    
     this.vx *= 0.95; this.vy *= 0.95;
     this.x += this.vx; this.y += this.vy;
   }
   draw(ctx: CanvasRenderingContext2D) {
-    ctx.save();
-    ctx.translate(this.x, this.y);
-    
-    // Aura/Glow
-    ctx.shadowColor = this.type === 'tank' ? '#a855f7' : this.type === 'shooter' ? '#f97316' : '#ef4444';
-    ctx.shadowBlur = 15;
-    
-    // Body
-    ctx.fillStyle = this.type === 'tank' ? '#a855f7' : this.type === 'shooter' ? '#f97316' : '#ef4444';
-    ctx.beginPath(); ctx.arc(0, 0, this.size, 0, Math.PI * 2); ctx.fill();
-    
-    // Inner core
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.beginPath(); ctx.arc(0, 0, this.size * 0.6, 0, Math.PI * 2); ctx.fill();
-    
-    // Eyes
-    const angle = Math.atan2(this.vy, this.vx);
-    ctx.rotate(angle);
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = 'white';
-    ctx.beginPath(); ctx.arc(this.size * 0.4, -this.size * 0.3, this.size * 0.2, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(this.size * 0.4, this.size * 0.3, this.size * 0.2, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'black';
-    ctx.beginPath(); ctx.arc(this.size * 0.5, -this.size * 0.3, this.size * 0.1, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(this.size * 0.5, this.size * 0.3, this.size * 0.1, 0, Math.PI * 2); ctx.fill();
-    
-    ctx.restore();
-    
-    // HP Bar
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.fillRect(this.x - 15, this.y - this.size - 12, 30, 4);
+    ctx.fillRect(this.x - 10, this.y - 20, 20, 4);
     ctx.fillStyle = '#22c55e';
-    ctx.fillRect(this.x - 15, this.y - this.size - 12, 30 * (this.hp / this.maxHp), 4);
-  }
-}
-
-class Platform {
-  x: number; y: number; w: number; h: number;
-  constructor(x: number, y: number, w: number, h: number) {
-    this.x = x; this.y = y; this.w = w; this.h = h;
-  }
-  draw(ctx: CanvasRenderingContext2D) {
-    // Main body
-    ctx.fillStyle = '#1e293b';
-    ctx.beginPath();
-    ctx.roundRect(this.x, this.y, this.w, this.h, 8);
-    ctx.fill();
-    
-    // Top highlight
-    ctx.fillStyle = '#334155';
-    ctx.beginPath();
-    ctx.roundRect(this.x, this.y, this.w, this.h * 0.3, {tl: 8, tr: 8, bl: 0, br: 0});
-    ctx.fill();
-    
-    // Border
-    ctx.strokeStyle = '#475569';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.roundRect(this.x, this.y, this.w, this.h, 8);
-    ctx.stroke();
-  }
-}
-
-class Lava extends Platform {
-  life: number = 0;
-  constructor(x: number, y: number, w: number, h: number) {
-    super(x, y, w, h);
-  }
-  draw(ctx: CanvasRenderingContext2D) {
-    this.life += 0.05;
-    ctx.fillStyle = '#7f1d1d';
-    ctx.beginPath(); ctx.roundRect(this.x, this.y, this.w, this.h, 4); ctx.fill();
-    ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 2; ctx.stroke();
-    
-    // Animated bubbling/wave effect
-    ctx.fillStyle = 'rgba(239, 68, 68, 0.6)';
-    ctx.beginPath();
-    ctx.moveTo(this.x, this.y);
-    for (let i = 0; i <= this.w; i += 10) {
-      ctx.lineTo(this.x + i, this.y - 5 + Math.sin(this.life + i * 0.1) * 5);
-    }
-    ctx.lineTo(this.x + this.w, this.y + this.h);
-    ctx.lineTo(this.x, this.y + this.h);
-    ctx.fill();
-  }
-}
-
-class PowerUp {
-  x: number; y: number; type: 'multishot' | 'rapidfire' | 'heal' | 'shield' | 'speed';
-  bobOffset: number = 0; life: number = 0;
-  constructor(x: number, y: number, type: 'multishot' | 'rapidfire' | 'heal' | 'shield' | 'speed') {
-    this.x = x; this.y = y; this.type = type;
-  }
-  update() { this.life += 0.05; this.bobOffset = Math.sin(this.life) * 10; }
-  draw(ctx: CanvasRenderingContext2D) {
-    ctx.save();
-    ctx.translate(this.x, this.y + this.bobOffset);
-    
-    const color = this.type === 'heal' ? '#22c55e' : this.type === 'rapidfire' ? '#facc15' : this.type === 'shield' ? '#06b6d4' : this.type === 'speed' ? '#3b82f6' : '#a855f7';
-    
-    // Glow
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 15;
-    
-    // Outer ring
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI * 2); ctx.stroke();
-    
-    // Inner circle
-    ctx.fillStyle = color;
-    ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.fill();
-    
-    // Text
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = 'bold 16px sans-serif';
-    ctx.fillText(this.type === 'heal' ? 'H' : this.type === 'rapidfire' ? 'R' : this.type === 'shield' ? 'S' : this.type === 'speed' ? '>>' : 'M', 0, 0);
-    
-    ctx.restore();
-  }
-}
-
-class Portal {
-  x: number; y: number; rotation: number = 0; scale: number = 0;
-  constructor(x: number, y: number) { this.x = x; this.y = y; }
-  update() { 
-    this.rotation += 0.05; 
-    if (this.scale < 1) this.scale += 0.05;
-  }
-  draw(ctx: CanvasRenderingContext2D) {
-    ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.rotation); ctx.scale(this.scale, this.scale);
-    ctx.strokeStyle = '#c084fc'; ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI * 2); ctx.stroke();
-    ctx.setLineDash([10, 10]); ctx.strokeStyle = '#e879f9';
-    ctx.beginPath(); ctx.arc(0, 0, 40, 0, Math.PI * 2); ctx.stroke();
-    
-    // Inner glow
-    const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 30);
-    gradient.addColorStop(0, 'rgba(232, 121, 249, 0.8)');
-    gradient.addColorStop(1, 'rgba(232, 121, 249, 0)');
-    ctx.fillStyle = gradient;
-    ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI * 2); ctx.fill();
-    
-    ctx.restore();
+    ctx.fillRect(this.x - 10, this.y - 20, 20 * (this.hp / 3), 4);
   }
 }
 
@@ -380,16 +184,16 @@ export default function SlimeApp() {
   // Customizations
   const [color, setColor] = useState('#10b981');
   const [shape, setShape] = useState('circle');
-  const [stiffness, setStiffness] = useState(0.08);
-  const [surfaceTension, setSurfaceTension] = useState(0.2);
+  const [stiffness, setStiffness] = useState(0.05);
+  const [surfaceTension, setSurfaceTension] = useState(0.1);
   const [viscosity, setViscosity] = useState(0.05);
-  const [gravity, setGravity] = useState(0.8);
-  const [bounciness, setBounciness] = useState(0.3);
-  const [drag, setDrag] = useState(0.02);
+  const [gravity, setGravity] = useState(0.5);
+  const [bounciness, setBounciness] = useState(0.9);
+  const [drag, setDrag] = useState(0.01);
   const [eyes, setEyes] = useState(true);
-  const [gameMode, setGameMode] = useState(true);
-  const [wasdMode, setWasdMode] = useState(true);
-  const [size, setSize] = useState(60);
+  const [gameMode, setGameMode] = useState(false);
+  const [wasdMode, setWasdMode] = useState(false);
+  const [size, setSize] = useState(100);
   const [uiExpanded, setUiExpanded] = useState(false);
 
   const paramsRef = useRef({ color, stiffness, surfaceTension, viscosity, gravity, bounciness, drag, eyes, gameMode, wasdMode, size });
@@ -436,32 +240,16 @@ export default function SlimeApp() {
       mouseHistory: {x: number, y: number, time: number}[] = [];
       particles: Particle[] = [];
       bullets: Bullet[] = [];
-      enemyBullets: EnemyBullet[] = [];
       enemies: Enemy[] = [];
-      platforms: Platform[] = [];
-      lavas: Lava[] = [];
-      powerups: PowerUp[] = [];
-      portal: Portal | null = null;
       shockwaves: Shockwave[] = [];
       trail: {x: number, y: number}[] = [];
-      floatingTexts: FloatingText[] = [];
       baseRadii: number[] = [];
       shape: string = 'circle';
-      lastDashTime: number = 0;
+      lastShootTime: number = 0;
       gunRecoil: number = 0;
       screenShake: number = 0;
       blinkTimer: number = 0;
       isBlinking: boolean = false;
-      
-      // Game State
-      level: number = 1;
-      score: number = 0;
-      hp: number = 100;
-      maxHp: number = 100;
-      invulnTimer: number = 0;
-      hasShield: boolean = false;
-      activePowerups: { [key: string]: number } = {};
-      isGrounded: boolean = false;
       
       constructor(cx: number, cy: number, radius: number, numPoints: number, shape: string) {
         this.shape = shape;
@@ -524,86 +312,6 @@ export default function SlimeApp() {
         return radius;
       }
 
-      loadLevel(levelIndex: number) {
-        this.level = levelIndex;
-        this.platforms = [];
-        this.lavas = [];
-        this.enemies = [];
-        this.powerups = [];
-        this.portal = null;
-        this.bullets = [];
-        this.enemyBullets = [];
-        this.particles = [];
-        this.shockwaves = [];
-        this.trail = [];
-        
-        const cw = window.innerWidth;
-        const ch = window.innerHeight;
-        
-        // Reset slime position to start
-        const cx = 100;
-        const cy = ch - 150;
-        const dx = cx - this.centerPoint.x;
-        const dy = cy - this.centerPoint.y;
-        
-        for (const p of this.points) {
-          p.x += dx; p.y += dy;
-          p.oldX = p.x; p.oldY = p.y;
-        }
-
-        if (levelIndex === 1) {
-          this.platforms.push(new Platform(cw/2 - 150, ch - 150, 300, 20));
-          this.platforms.push(new Platform(cw/2 + 250, ch - 300, 200, 20));
-          this.enemies.push(new Enemy(cw/2, ch - 200, 'chaser'));
-          this.enemies.push(new Enemy(cw/2 + 300, ch - 350, 'chaser'));
-          this.powerups.push(new PowerUp(cw/2, ch - 200, 'rapidfire'));
-        } else if (levelIndex === 2) {
-          this.platforms.push(new Platform(200, ch - 200, 150, 20));
-          this.platforms.push(new Platform(450, ch - 350, 150, 20));
-          this.platforms.push(new Platform(700, ch - 500, 150, 20));
-          this.enemies.push(new Enemy(250, ch - 250, 'chaser'));
-          this.enemies.push(new Enemy(500, ch - 400, 'shooter'));
-          this.enemies.push(new Enemy(750, ch - 550, 'chaser'));
-          this.powerups.push(new PowerUp(500, ch - 400, 'shield'));
-        } else if (levelIndex === 3) {
-          this.platforms.push(new Platform(100, ch - 200, 200, 20));
-          this.lavas.push(new Lava(300, ch - 200, 200, 20));
-          this.platforms.push(new Platform(500, ch - 200, 200, 20));
-          this.platforms.push(new Platform(cw/2 - 100, ch - 450, 200, 20));
-          this.enemies.push(new Enemy(cw/2, ch - 500, 'tank'));
-          this.enemies.push(new Enemy(150, ch - 250, 'shooter'));
-          this.enemies.push(new Enemy(600, ch - 250, 'shooter'));
-          this.powerups.push(new PowerUp(cw/2, ch - 500, 'multishot'));
-          this.powerups.push(new PowerUp(150, ch - 250, 'speed'));
-        } else if (levelIndex >= 4) {
-          // Procedural generation for higher levels
-          const numPlats = 3 + Math.floor(Math.random() * 4);
-          let lastPy = ch - 150;
-          for (let i = 0; i < numPlats; i++) {
-            const px = 200 + Math.random() * (cw - 400);
-            // Ensure platforms don't overlap vertically too much
-            const py = lastPy - 100 - Math.random() * 150;
-            lastPy = py;
-            
-            if (Math.random() > 0.8) {
-              this.lavas.push(new Lava(px, py, 150 + Math.random() * 100, 20));
-            } else {
-              this.platforms.push(new Platform(px, py, 150 + Math.random() * 100, 20));
-            }
-            
-            if (Math.random() > 0.3) {
-              const r = Math.random();
-              const type = r > 0.8 ? 'tank' : r > 0.5 ? 'shooter' : 'chaser';
-              this.enemies.push(new Enemy(px + 75, py - 50, type));
-            }
-            if (Math.random() > 0.8) {
-              const types: ('multishot'|'rapidfire'|'heal'|'shield'|'speed')[] = ['multishot', 'rapidfire', 'heal', 'shield', 'speed'];
-              this.powerups.push(new PowerUp(px + 75, py - 100, types[Math.floor(Math.random()*types.length)]));
-            }
-          }
-        }
-      }
-
       reset(newShape?: string) {
         const cx = canvas.width / 2;
         const cy = canvas.height / 2;
@@ -637,23 +345,10 @@ export default function SlimeApp() {
         }
         this.particles = [];
         this.bullets = [];
-        this.enemyBullets = [];
         this.enemies = [];
-        this.platforms = [];
-        this.lavas = [];
-        this.powerups = [];
-        this.portal = null;
         this.shockwaves = [];
-        this.floatingTexts = [];
         this.trail = [];
         this.screenShake = 0;
-        this.hp = this.maxHp;
-        this.score = 0;
-        this.hasShield = false;
-        this.activePowerups = {};
-        if (paramsRef.current.gameMode) {
-          this.loadLevel(1);
-        }
       }
 
       updateParams() {
@@ -708,8 +403,7 @@ export default function SlimeApp() {
       shoot() {
         if (!paramsRef.current.gameMode) return;
         const now = Date.now();
-        const cooldown = this.activePowerups['rapidfire'] && this.activePowerups['rapidfire'] > now ? 50 : 200;
-        if (now - this.lastShootTime < cooldown) return;
+        if (now - this.lastShootTime < 200) return;
         this.lastShootTime = now;
         this.gunRecoil = 15;
         this.screenShake = Math.max(this.screenShake, 5);
@@ -730,16 +424,7 @@ export default function SlimeApp() {
         const gunTipX = cx + (dx/dist)*70;
         const gunTipY = cy + (dy/dist)*70;
 
-        if (this.activePowerups['multishot'] && this.activePowerups['multishot'] > now) {
-          const angle = Math.atan2(vy, vx);
-          const spread = 0.2;
-          for (let i = -1; i <= 1; i++) {
-            const a = angle + i * spread;
-            this.bullets.push(new Bullet(gunTipX, gunTipY, Math.cos(a) * 15, Math.sin(a) * 15));
-          }
-        } else {
-          this.bullets.push(new Bullet(gunTipX, gunTipY, vx, vy));
-        }
+        this.bullets.push(new Bullet(gunTipX, gunTipY, vx, vy));
         
         // Muzzle flash
         for (let i = 0; i < 3; i++) {
@@ -759,22 +444,16 @@ export default function SlimeApp() {
 
       update() {
         this.updateParams();
-        const { drag, gravity, bounciness, wasdMode, color, gameMode } = paramsRef.current;
+        const { drag, gravity, bounciness, wasdMode, color } = paramsRef.current;
         const friction = 1 - drag;
-        const now = Date.now();
-
-        this.isGrounded = false;
 
         // WASD Control
         if (wasdMode) {
-          const speed = this.activePowerups['speed'] && this.activePowerups['speed'] > now ? 2.5 : 1.5;
+          const speed = 1.5;
+          if (keysRef.current['w'] || keysRef.current['arrowup']) this.centerPoint.oldY += speed;
           if (keysRef.current['s'] || keysRef.current['arrowdown']) this.centerPoint.oldY -= speed;
-          if (keysRef.current['a'] || keysRef.current['arrowleft']) {
-            for(const p of this.points) p.oldX += speed * 0.5;
-          }
-          if (keysRef.current['d'] || keysRef.current['arrowright']) {
-            for(const p of this.points) p.oldX -= speed * 0.5;
-          }
+          if (keysRef.current['a'] || keysRef.current['arrowleft']) this.centerPoint.oldX += speed;
+          if (keysRef.current['d'] || keysRef.current['arrowright']) this.centerPoint.oldX -= speed;
         }
 
         this.screenShake *= 0.9;
@@ -810,43 +489,6 @@ export default function SlimeApp() {
           p.x += vx;
           p.y += vy + gravity * p.mass;
 
-          // Platform collision
-          for (const plat of this.platforms) {
-            // AABB check with a small margin to prevent getting stuck
-            if (p.x > plat.x - 2 && p.x < plat.x + plat.w + 2 && p.y > plat.y - 2 && p.y < plat.y + plat.h + 2) {
-              const distLeft = Math.abs(p.x - plat.x);
-              const distRight = Math.abs((plat.x + plat.w) - p.x);
-              const distTop = Math.abs(p.y - plat.y);
-              const distBottom = Math.abs((plat.y + plat.h) - p.y);
-              const minDist = Math.min(distLeft, distRight, distTop, distBottom);
-              
-              if (minDist === distTop) { 
-                p.y = plat.y; p.oldY = p.y + vy * bounciness; p.oldX = p.x - vx * 0.8; 
-                this.isGrounded = true; 
-              } else if (minDist === distBottom) { 
-                p.y = plat.y + plat.h; p.oldY = p.y + vy * bounciness; p.oldX = p.x - vx * 0.8; 
-              } else if (minDist === distLeft) { 
-                p.x = plat.x; p.oldX = p.x + vx * bounciness; p.oldY = p.y - vy * 0.8; 
-              } else if (minDist === distRight) { 
-                p.x = plat.x + plat.w; p.oldX = p.x + vx * bounciness; p.oldY = p.y - vy * 0.8; 
-              }
-            }
-          }
-
-          // Lava collision
-          for (const lava of this.lavas) {
-            if (p.x > lava.x && p.x < lava.x + lava.w && p.y > lava.y && p.y < lava.y + lava.h) {
-              const distTop = p.y - lava.y;
-              p.y = lava.y; p.oldY = p.y + vy * bounciness; p.oldX = p.x - vx * 0.8; 
-              this.isGrounded = true;
-              
-              if (now - this.invulnTimer > 1000) {
-                this.takeDamage(15);
-                this.centerPoint.oldY += 20; // Bounce off lava
-              }
-            }
-          }
-
           // Floor collision
           if (p.y > canvas.height - 20) {
             if (vy > 10) {
@@ -857,7 +499,6 @@ export default function SlimeApp() {
             p.y = canvas.height - 20;
             p.oldY = p.y + vy * bounciness;
             p.oldX = p.x - vx * 0.8; // Floor friction
-            this.isGrounded = true;
           }
           // Walls
           if (p.x < 20) {
@@ -893,36 +534,6 @@ export default function SlimeApp() {
           }
         }
 
-        // Dash logic
-        if (wasdMode && keysRef.current['shift'] && now - (this as any).lastDashTime > 1000) {
-          (this as any).lastDashTime = now;
-          const dashForce = 30;
-          let dx = 0; let dy = 0;
-          if (keysRef.current['a'] || keysRef.current['arrowleft']) dx = -dashForce;
-          if (keysRef.current['d'] || keysRef.current['arrowright']) dx = dashForce;
-          if (keysRef.current['w'] || keysRef.current['arrowup']) dy = -dashForce;
-          if (keysRef.current['s'] || keysRef.current['arrowdown']) dy = dashForce;
-          
-          if (dx !== 0 || dy !== 0) {
-            for (const p of this.points) {
-              p.oldX = p.x - dx;
-              p.oldY = p.y - dy;
-            }
-            this.spawnSplatter(this.centerPoint.x, this.centerPoint.y, -dx*0.5, -dy*0.5, paramsRef.current.color);
-            this.shockwaves.push(new Shockwave(this.centerPoint.x, this.centerPoint.y, 40, this.hexToRgb(color)));
-          }
-        }
-
-        // Jump logic
-        if (wasdMode && (keysRef.current['w'] || keysRef.current['arrowup']) && this.isGrounded) {
-          const jumpForce = this.activePowerups['speed'] && this.activePowerups['speed'] > now ? 25 : 20;
-          for (const p of this.points) {
-            p.oldY = p.y + jumpForce; // Upward impulse
-          }
-          this.isGrounded = false;
-          this.spawnSplatter(this.centerPoint.x, this.centerPoint.y + paramsRef.current.size, 0, 5, paramsRef.current.color);
-        }
-
         // Relax springs
         for (let i = 0; i < 8; i++) {
           for (const spring of this.springs) {
@@ -943,41 +554,6 @@ export default function SlimeApp() {
           this.particles[i].update(canvas.height);
           if (this.particles[i].life >= this.particles[i].maxLife) {
             this.particles.splice(i, 1);
-          }
-        }
-
-        // Update powerups
-        for (let i = this.powerups.length - 1; i >= 0; i--) {
-          const pu = this.powerups[i];
-          pu.update();
-          const dist = Math.hypot(this.centerPoint.x - pu.x, this.centerPoint.y - pu.y);
-          if (dist < paramsRef.current.size + 15) {
-            if (pu.type === 'heal') {
-              this.hp = Math.min(this.maxHp, this.hp + 30);
-              this.floatingTexts.push(new FloatingText(this.centerPoint.x, this.centerPoint.y - 40, '+30', 'green'));
-            } else if (pu.type === 'shield') {
-              this.hasShield = true;
-            } else {
-              this.activePowerups[pu.type] = now + 10000; // 10 seconds
-            }
-            this.score += 50;
-            this.spawnSplatter(pu.x, pu.y, 0, 0, pu.type === 'heal' ? '#22c55e' : pu.type === 'shield' ? '#06b6d4' : '#facc15');
-            this.powerups.splice(i, 1);
-          }
-        }
-
-        // Update portal
-        if (gameMode && this.enemies.length === 0 && !this.portal) {
-          this.portal = new Portal(canvas.width / 2, 100);
-        }
-        if (this.portal) {
-          this.portal.update();
-          const dist = Math.hypot(this.centerPoint.x - this.portal.x, this.centerPoint.y - this.portal.y);
-          if (dist < paramsRef.current.size + 30) {
-            this.score += 500;
-            this.floatingTexts.push(new FloatingText(this.centerPoint.x, this.centerPoint.y - 40, '+500', 'green'));
-            this.loadLevel(this.level + 1);
-            return;
           }
         }
 
@@ -1006,8 +582,6 @@ export default function SlimeApp() {
                 this.shockwaves.push(new Shockwave(e.x, e.y, 60, '239, 68, 68'));
                 this.screenShake = Math.max(this.screenShake, 8);
                 this.enemies.splice(j, 1);
-                this.score += 100;
-                this.floatingTexts.push(new FloatingText(e.x, e.y - 20, '+100', 'white'));
               }
               break;
             }
@@ -1017,44 +591,21 @@ export default function SlimeApp() {
           }
         }
 
-        // Spawn enemies (only if not in a level or if we want continuous spawning)
-        if (gameMode && Math.random() < 0.01 && this.enemies.length < 5 && this.level < 1) {
+        // Spawn enemies
+        if (paramsRef.current.gameMode && Math.random() < 0.02 && this.enemies.length < 10) {
           const side = Math.floor(Math.random() * 4);
           let ex = 0, ey = 0;
           if (side === 0) { ex = Math.random() * canvas.width; ey = -30; }
           else if (side === 1) { ex = canvas.width + 30; ey = Math.random() * canvas.height; }
           else if (side === 2) { ex = Math.random() * canvas.width; ey = canvas.height + 30; }
           else { ex = -30; ey = Math.random() * canvas.height; }
-          this.enemies.push(new Enemy(ex, ey, 'chaser'));
-        }
-
-        // Update enemy bullets
-        for (let i = this.enemyBullets.length - 1; i >= 0; i--) {
-          const b = this.enemyBullets[i];
-          b.update();
-          if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height || b.life > 200) {
-            this.enemyBullets.splice(i, 1);
-            continue;
-          }
-          const dist = Math.hypot(this.centerPoint.x - b.x, this.centerPoint.y - b.y);
-          if (dist < paramsRef.current.size + 5) {
-            this.takeDamage(10);
-            this.floatingTexts.push(new FloatingText(this.centerPoint.x, this.centerPoint.y - 40, '-10', 'red'));
-            this.enemyBullets.splice(i, 1);
-          }
-        }
-
-        // Update floating texts
-        for (let i = this.floatingTexts.length - 1; i >= 0; i--) {
-          const ft = this.floatingTexts[i];
-          ft.update();
-          if (ft.life >= ft.maxLife) this.floatingTexts.splice(i, 1);
+          this.enemies.push(new Enemy(ex, ey));
         }
 
         // Update enemies
-        if (gameMode) {
+        if (paramsRef.current.gameMode) {
           for (const e of this.enemies) {
-            e.update(this);
+            e.update(this.centerPoint.x, this.centerPoint.y);
             // Collision with slime
             const dist = Math.hypot(this.centerPoint.x - e.x, this.centerPoint.y - e.y);
             if (dist < paramsRef.current.size + e.size) {
@@ -1068,42 +619,11 @@ export default function SlimeApp() {
                 this.centerPoint.oldX -= (dx / ndist) * 2;
                 this.centerPoint.oldY -= (dy / ndist) * 2;
               }
-              
-              // Damage player
-              if (now - this.invulnTimer > 1000) {
-                this.takeDamage(15);
-                this.floatingTexts.push(new FloatingText(this.centerPoint.x, this.centerPoint.y - 40, '-15', 'red'));
-              }
             }
           }
         }
         
         this.gunRecoil *= 0.8;
-      }
-
-      takeDamage(amount: number) {
-        const now = Date.now();
-        if (now - this.invulnTimer < 1000) return;
-        
-        if (this.hasShield) {
-          this.hasShield = false;
-          this.invulnTimer = now;
-          this.screenShake = Math.max(this.screenShake, 5);
-          this.shockwaves.push(new Shockwave(this.centerPoint.x, this.centerPoint.y, 100, '6, 182, 212'));
-          return;
-        }
-
-        this.hp -= amount;
-        this.invulnTimer = now;
-        this.screenShake = Math.max(this.screenShake, 10);
-        this.spawnSplatter(this.centerPoint.x, this.centerPoint.y, 0, 0, paramsRef.current.color);
-        if (this.hp <= 0) {
-          this.loadLevel(1); // Restart
-          this.hp = this.maxHp;
-          this.score = 0;
-          this.hasShield = false;
-          this.activePowerups = {};
-        }
       }
 
       draw(ctx: CanvasRenderingContext2D) {
@@ -1118,18 +638,6 @@ export default function SlimeApp() {
         }
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        // Draw platforms
-        for (const plat of this.platforms) plat.draw(ctx);
-
-        // Draw lava
-        for (const lava of this.lavas) lava.draw(ctx);
-
-        // Draw portal
-        if (this.portal) this.portal.draw(ctx);
-
-        // Draw powerups
-        for (const pu of this.powerups) pu.draw(ctx);
 
         // Draw trail
         if (this.trail.length > 1) {
@@ -1168,16 +676,6 @@ export default function SlimeApp() {
         const midX = (first.x + second.x) / 2;
         const midY = (first.y + second.y) / 2;
         ctx.quadraticCurveTo(first.x, first.y, midX, midY);
-
-        // Draw aura
-        ctx.beginPath();
-        ctx.arc(this.centerPoint.x, this.centerPoint.y, paramsRef.current.size * 1.5, 0, Math.PI * 2);
-        const gradient = ctx.createRadialGradient(this.centerPoint.x, this.centerPoint.y, paramsRef.current.size * 0.5, this.centerPoint.x, this.centerPoint.y, paramsRef.current.size * 1.5);
-        const rgb = this.hexToRgb(color);
-        gradient.addColorStop(0, `rgba(${rgb}, 0.2)`);
-        gradient.addColorStop(1, `rgba(${rgb}, 0)`);
-        ctx.fillStyle = gradient;
-        ctx.fill();
 
         ctx.fillStyle = color;
         ctx.fill();
@@ -1248,22 +746,10 @@ export default function SlimeApp() {
         
         // Draw bullets
         for (const b of this.bullets) b.draw(ctx);
-        for (const b of this.enemyBullets) b.draw(ctx);
 
         // Draw enemies
         if (paramsRef.current.gameMode) {
           for (const e of this.enemies) e.draw(ctx);
-        }
-
-        // Draw shield
-        if (this.hasShield) {
-          ctx.beginPath();
-          ctx.arc(this.centerPoint.x, this.centerPoint.y, paramsRef.current.size + 15, 0, Math.PI * 2);
-          ctx.strokeStyle = '#06b6d4';
-          ctx.lineWidth = 3;
-          ctx.stroke();
-          ctx.fillStyle = 'rgba(6, 182, 212, 0.2)';
-          ctx.fill();
         }
 
         // Draw gun
@@ -1323,64 +809,6 @@ export default function SlimeApp() {
           ctx.roundRect(25, -3, 20 * cooldownRatio, 6, 3);
           ctx.fill();
           ctx.shadowBlur = 0;
-
-          ctx.restore();
-        }
-
-        // Damage flash overlay (draw before HUD)
-        const nowTime = Date.now();
-        if (nowTime - this.invulnTimer < 100) {
-          ctx.save();
-          ctx.resetTransform();
-          ctx.fillStyle = 'rgba(239, 68, 68, 0.3)';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.restore();
-        }
-
-        // Draw floating texts
-        for (const ft of this.floatingTexts) ft.draw(ctx);
-
-        // Draw HUD
-        if (paramsRef.current.gameMode) {
-          ctx.save();
-          ctx.resetTransform(); // Reset any screen shake for HUD
-          
-          // HUD Glassmorphism Background
-          ctx.fillStyle = 'rgba(15, 23, 42, 0.6)';
-          ctx.beginPath();
-          ctx.roundRect(10, 10, 220, 100 + Object.keys(this.activePowerups).length * 25, 12);
-          ctx.fill();
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-          ctx.lineWidth = 1;
-          ctx.stroke();
-
-          // Top left: HP & Score
-          ctx.fillStyle = 'white';
-          ctx.font = 'bold 20px sans-serif';
-          ctx.textAlign = 'left';
-          ctx.textBaseline = 'top';
-          ctx.fillText(`Score: ${this.score}`, 20, 20);
-          ctx.fillStyle = '#94a3b8';
-          ctx.font = 'bold 16px sans-serif';
-          ctx.fillText(`Level ${this.level}`, 20, 45);
-
-          // HP Bar
-          ctx.fillStyle = '#334155';
-          ctx.beginPath(); ctx.roundRect(20, 70, 180, 12, 6); ctx.fill();
-          ctx.fillStyle = this.hp > 30 ? '#22c55e' : '#ef4444';
-          ctx.beginPath(); ctx.roundRect(20, 70, 180 * (this.hp / this.maxHp), 12, 6); ctx.fill();
-
-          // Active Powerups
-          let puY = 95;
-          for (const [type, expiry] of Object.entries(this.activePowerups)) {
-            if (expiry > nowTime) {
-              const remaining = Math.ceil((expiry - nowTime) / 1000);
-              ctx.fillStyle = type === 'rapidfire' ? '#facc15' : '#a855f7';
-              ctx.font = 'bold 16px sans-serif';
-              ctx.fillText(`${type.toUpperCase()}: ${remaining}s`, 20, puY);
-              puY += 25;
-            }
-          }
 
           ctx.restore();
         }
@@ -1486,11 +914,11 @@ export default function SlimeApp() {
   }, []); // Empty dep array, we update params via refs
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-slate-950" style={{
-      backgroundImage: 'radial-gradient(circle at 2px 2px, rgba(255,255,255,0.05) 1px, transparent 0)',
+    <div className="relative w-full h-screen overflow-hidden bg-slate-900" style={{
+      backgroundImage: 'radial-gradient(circle at 2px 2px, rgba(255,255,255,0.1) 1px, transparent 0)',
       backgroundSize: '40px 40px'
     }}>
-      <canvas ref={canvasRef} className={`absolute inset-0 ${gameMode ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'}`} />
+      <canvas ref={canvasRef} className="absolute inset-0 cursor-grab active:cursor-grabbing" />
       
       <div 
         className={`absolute top-4 right-0 transition-transform duration-300 flex items-start z-10 ${uiExpanded ? 'translate-x-0' : 'translate-x-[calc(100%-3rem)]'}`}
@@ -1504,21 +932,21 @@ export default function SlimeApp() {
           <Settings className="w-6 h-6 text-slate-700" />
         </div>
         
-        <Card className="w-80 bg-white/10 backdrop-blur-md shadow-2xl border-white/20 rounded-r-none rounded-l-none max-h-[calc(100vh-2rem)] flex flex-col text-white">
-          <CardHeader className="pb-4 shrink-0 border-b border-white/10">
-            <CardTitle className="text-xl font-bold text-white">Slime Lab</CardTitle>
+        <Card className="w-80 bg-white/90 backdrop-blur shadow-xl border-0 rounded-r-none rounded-l-none max-h-[calc(100vh-2rem)] flex flex-col">
+          <CardHeader className="pb-4 shrink-0">
+            <CardTitle className="text-xl font-bold text-slate-800">Slime Lab</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4 overflow-y-auto pb-6 scrollbar-thin flex-1 pt-4">
+          <CardContent className="space-y-4 overflow-y-auto pb-6 scrollbar-thin flex-1">
             
             <div className="space-y-3">
               <div className="flex justify-between">
-                <Label className="text-white">Color</Label>
+                <Label>Color</Label>
               </div>
               <div className="flex gap-2">
                 {['#10b981', '#3b82f6', '#ec4899', '#f59e0b', '#8b5cf6'].map(c => (
                   <button
                     key={c}
-                    className={`w-8 h-8 rounded-full border-2 ${color === c ? 'border-white scale-110' : 'border-transparent'}`}
+                    className={`w-8 h-8 rounded-full border-2 ${color === c ? 'border-slate-800 scale-110' : 'border-transparent'}`}
                     style={{ backgroundColor: c }}
                     onClick={() => setColor(c)}
                   />
@@ -1533,7 +961,7 @@ export default function SlimeApp() {
             </div>
 
             <div className="space-y-3">
-              <Label className="text-white">Shape</Label>
+              <Label>Shape</Label>
               <div className="flex gap-2 flex-wrap">
                 {['circle', 'cubical', 'tetrahedral', 'amorphous'].map(s => (
                   <button
@@ -1543,10 +971,10 @@ export default function SlimeApp() {
                       setShape(actualShape);
                       physicsRef.current?.reset(actualShape);
                     }}
-                    className={`px-3 py-1 text-xs rounded-full capitalize transition-colors ${
+                    className={`px-3 py-1 text-xs rounded-full capitalize ${
                       (shape === s || (shape === 'square' && s === 'cubical') || (shape === 'triangle' && s === 'tetrahedral')) 
-                        ? 'bg-white text-slate-900 font-bold' 
-                        : 'bg-white/10 text-white hover:bg-white/20'
+                        ? 'bg-slate-800 text-white' 
+                        : 'bg-slate-200 text-slate-800 hover:bg-slate-300'
                     }`}
                   >
                     {s}
@@ -1557,20 +985,20 @@ export default function SlimeApp() {
 
             <div className="space-y-3">
               <div className="flex justify-between">
-                <Label className="text-white">Size</Label>
-                <span className="text-xs text-slate-300">{size}</span>
+                <Label>Size</Label>
+                <span className="text-xs text-slate-500">{size}</span>
               </div>
               <Slider 
                 value={[size]} 
-                min={30} max={150} step={1}
+                min={50} max={200} step={1}
                 onValueChange={([v]) => setSize(v)} 
               />
             </div>
 
             <div className="space-y-3">
               <div className="flex justify-between">
-                <Label className="text-white">Internal Stiffness</Label>
-                <span className="text-xs text-slate-300">{stiffness.toFixed(2)}</span>
+                <Label>Internal Stiffness</Label>
+                <span className="text-xs text-slate-500">{stiffness.toFixed(2)}</span>
               </div>
               <Slider 
                 value={[stiffness]} 
@@ -1581,8 +1009,8 @@ export default function SlimeApp() {
 
             <div className="space-y-3">
               <div className="flex justify-between">
-                <Label className="text-white">Surface Tension</Label>
-                <span className="text-xs text-slate-300">{surfaceTension.toFixed(2)}</span>
+                <Label>Surface Tension</Label>
+                <span className="text-xs text-slate-500">{surfaceTension.toFixed(2)}</span>
               </div>
               <Slider 
                 value={[surfaceTension]} 
@@ -1593,8 +1021,8 @@ export default function SlimeApp() {
 
             <div className="space-y-3">
               <div className="flex justify-between">
-                <Label className="text-white">Viscosity</Label>
-                <span className="text-xs text-slate-300">{viscosity.toFixed(2)}</span>
+                <Label>Viscosity</Label>
+                <span className="text-xs text-slate-500">{viscosity.toFixed(2)}</span>
               </div>
               <Slider 
                 value={[viscosity]} 
@@ -1605,8 +1033,8 @@ export default function SlimeApp() {
 
             <div className="space-y-3">
               <div className="flex justify-between">
-                <Label className="text-white">Gravity</Label>
-                <span className="text-xs text-slate-300">{gravity.toFixed(2)}</span>
+                <Label>Gravity</Label>
+                <span className="text-xs text-slate-500">{gravity.toFixed(2)}</span>
               </div>
               <Slider 
                 value={[gravity]} 
@@ -1617,8 +1045,8 @@ export default function SlimeApp() {
 
             <div className="space-y-3">
               <div className="flex justify-between">
-                <Label className="text-white">Bounciness</Label>
-                <span className="text-xs text-slate-300">{bounciness.toFixed(2)}</span>
+                <Label>Bounciness</Label>
+                <span className="text-xs text-slate-500">{bounciness.toFixed(2)}</span>
               </div>
               <Slider 
                 value={[bounciness]} 
@@ -1629,8 +1057,8 @@ export default function SlimeApp() {
 
             <div className="space-y-3">
               <div className="flex justify-between">
-                <Label className="text-white">Air Drag</Label>
-                <span className="text-xs text-slate-300">{drag.toFixed(2)}</span>
+                <Label>Air Drag</Label>
+                <span className="text-xs text-slate-500">{drag.toFixed(2)}</span>
               </div>
               <Slider 
                 value={[drag]} 
@@ -1640,23 +1068,23 @@ export default function SlimeApp() {
             </div>
 
             <div className="flex items-center justify-between pt-2">
-              <Label className="text-white">Googly Eyes</Label>
+              <Label>Googly Eyes</Label>
               <Switch checked={eyes} onCheckedChange={setEyes} />
             </div>
 
             <div className="flex items-center justify-between pt-2">
-              <Label className="text-white">Game Mode (Guns & Enemies)</Label>
+              <Label>Game Mode (Guns & Enemies)</Label>
               <Switch checked={gameMode} onCheckedChange={setGameMode} />
             </div>
 
             <div className="flex items-center justify-between pt-2">
-              <Label className="text-white">WASD Control Mode</Label>
+              <Label>WASD Control Mode</Label>
               <Switch checked={wasdMode} onCheckedChange={setWasdMode} />
             </div>
 
             <button 
               onClick={() => physicsRef.current?.reset()}
-              className="w-full py-2 mt-4 flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 text-white rounded-lg font-medium transition-colors border border-white/20"
+              className="w-full py-2 mt-4 flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-medium transition-colors"
             >
               <RotateCcw className="w-4 h-4" />
               Reset Slime
